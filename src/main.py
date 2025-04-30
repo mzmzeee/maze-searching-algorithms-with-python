@@ -13,6 +13,7 @@
 # 4. Visualizes the maze, solution paths, and metrics using the plot_maze function
 
 import argparse
+import concurrent.futures
 from maze import Maze
 from algorithms import bfs, dfs, astar
 from visualize import plot_maze
@@ -34,18 +35,26 @@ def time_algorithm(algo, maze, start, exit, repeat=1000):
 def run_all(maze_obj, maze, start, exit, repeat=1000):
     results = {}
     paths = {}
-    # BFS
-    path, nodes, mem, avg_time = time_algorithm(bfs, maze, start, exit, repeat)
-    results['bfs'] = {'cost': len(path) if path else -1, 'nodes': nodes, 'time': avg_time, 'mem': mem}
-    paths['bfs'] = path
-    # DFS
-    path, nodes, mem, avg_time = time_algorithm(dfs, maze, start, exit, repeat)
-    results['dfs'] = {'cost': len(path) if path else -1, 'nodes': nodes, 'time': avg_time, 'mem': mem}
-    paths['dfs'] = path
-    # A*
-    path, nodes, mem, avg_time = time_algorithm(astar, maze, start, exit, repeat)
-    results['astar'] = {'cost': len(path) if path else -1, 'nodes': nodes, 'time': avg_time, 'mem': mem}
-    paths['astar'] = path
+    algorithms = {'bfs': bfs, 'dfs': dfs, 'astar': astar}
+    
+    # Use ProcessPoolExecutor for potential multi-core parallelism
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        # Submit each algorithm timing task to the executor
+        future_to_algo = {executor.submit(time_algorithm, algo, maze, start, exit, repeat): name 
+                          for name, algo in algorithms.items()}
+        
+        # Collect results as they complete
+        for future in concurrent.futures.as_completed(future_to_algo):
+            name = future_to_algo[future]
+            try:
+                path, nodes, mem, avg_time = future.result()
+                results[name] = {'cost': len(path) if path else -1, 'nodes': nodes, 'time': avg_time, 'mem': mem}
+                paths[name] = path
+            except Exception as exc:
+                print(f'{name} generated an exception: {exc}')
+                results[name] = {'cost': -1, 'nodes': -1, 'time': -1, 'mem': -1}
+                paths[name] = []
+
     return results, paths
 
 def main():
